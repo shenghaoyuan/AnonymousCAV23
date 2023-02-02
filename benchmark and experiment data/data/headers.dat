@@ -1,0 +1,12 @@
+test             
+ALU Add          
+ALU Add32        
+ALU Add imm      
+ALU Add32 imm    
+ALU mul imm      
+ALU mul32 imm    
+ALU rsh imm      
+ALU div imm      
+Branch always    
+Branch eq (jump) 
+Branch eq (cont) 

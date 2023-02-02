@@ -1,0 +1,31 @@
+*.config
+_CoqProject
+.CoqMakefile.d
+CoqMakefile
+CoqMakefile.conf
+compcertcprinter-cmx-args
+compcertcprinter.a
+dxmodel/*.ml
+dxmodel/*.mli
+dxmodel/main
+jit/monadicJIT/*.ml
+jit/monadicJIT/*.mli
+jit/monadicJIT/main
+jit/verifier/*.ml
+jit/verifier/*.mli
+jit/verifier/main
+verifier/dxmodel/*.ml
+verifier/dxmodel/*.mli
+verifier/dxmodel/main
+verifier/clightmodel/verifier-clightmodel
+compcertsrc-I
+/*.ml
+/*.mli
+example/exampleCode/ebpf2array
+example/exampleCode/ebpf2int64
+example/exampleCode/*.txt
+/clight/*
+! /clight/*.c
+! /clight/*.h
+! /clight/*.txt
+! /clight/*.v
