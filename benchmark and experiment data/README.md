@@ -3,7 +3,7 @@
 The following experiments are only tested on `nrf52840dk` (+ host OS: ubuntu).
 
 - `bench_bpf_jit_coq`: test our jit compiler + ibpf interpreter using fletcher32 algorithm
-- `bench_exec_array`: test how to execute an array with machine code on RIOT-OS
+- `bench_bpf_jit_coq_unit`: unit test
 
 # Experiments
 
