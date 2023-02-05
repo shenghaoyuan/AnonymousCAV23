@@ -58,7 +58,6 @@ all:
 	@$(MAKE) jit-clight
 	@$(MAKE) jit-simulation
 	@$(MAKE) jit-verification
-	@$(MAKE) example
 	@$(MAKE) document
 
 COMM= Flag.v LemmaNat.v LemmaInt.v ListAsArray.v rBPFAST.v rBPFMemType.v rBPFValues.v MemRegion.v Regs.v BinrBPF.v \

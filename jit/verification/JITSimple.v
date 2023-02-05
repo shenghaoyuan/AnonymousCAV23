@@ -167,9 +167,41 @@ Definition jit_alu32_pre (st: jit_state): option jit_state :=
   (**r LDR IR12 [R1, #8] *)
   jit_alu32_thumb_load_store_template_jit LDR_I_OP (Int.repr 12) Int.one (Int.repr 8) st.
 
+(**r computing all used callee-save registers *)
+Definition arm_callee_save_regs: list ireg := [IR4; IR5; IR6; IR7; IR8; IR9; IR10; IR11].
+
+Definition filter_csr (ldr_l str_l: list reg) (ir: ireg) :=
+  match (reg_of_ireg ir) with
+  | Some r =>
+    if (list_in_bool reg_eqb r ldr_l) || (list_in_bool reg_eqb r str_l) then
+      true
+    else
+      false
+  | None => true
+  end.
+
+Definition jit_alu32_stack_list (ldr_l str_l: list reg) (st: jit_state): list ireg :=
+  List.filter (fun x => filter_csr ldr_l str_l x) arm_callee_save_regs.
+
 (** * Spilling Stage: str ri [sp, #(i*4)] *)
-Definition jit_alu32_thumb_upd_save (r: reg) (ldr_l str_l: list reg) (st: jit_state): option jit_state :=
-  if (list_in_bool reg_eqb r ldr_l) || (list_in_bool reg_eqb r str_l) then
+Definition jit_alu32_thumb_upd_save (r: ireg) (st: jit_state): option jit_state :=
+    let ir := (Int.repr (Z.of_nat (ireg2nat r))) in
+      jit_alu32_thumb_load_store_template_jit STR_I_OP ir
+        (Int.repr (Z.of_nat (ireg2nat SP))) (Int.mul ir (Int.repr 4)) st.
+
+Fixpoint jit_alu32_thumb_save (l: list ireg) (st: jit_state): option jit_state :=
+  match l with
+  | [] => Some st
+  | r :: tl =>
+    match jit_alu32_thumb_upd_save r st with
+    | Some st1 => jit_alu32_thumb_save tl st1
+    | None => None
+    end
+  end.
+
+(*
+Definition jit_alu32_thumb_upd_save (r: reg) (l: list ireg) (st: jit_state): option jit_state :=
+  if (list_in_bool ireg_eqb r ldr_l) || (list_in_bool reg_eqb r str_l) then
     let ir := (Int.repr (Z.of_nat (reg2nat r))) in
       jit_alu32_thumb_load_store_template_jit STR_I_OP ir
         (Int.repr (Z.of_nat (ireg2nat SP))) (Int.mul ir (Int.repr 4)) st
@@ -210,7 +242,7 @@ Definition jit_alu32_thumb_save (ldr_l str_l: list reg) (st: jit_state): option 
     end
   | None => None
   end.
-
+*)
 (** * Load Stage: Load selected BPF registers into corresponding arm32 registers *)
 (*
 Definition jit_alu32_thumb_upd_load (r: reg) (ldr_l: list reg) (st: jit_state): option jit_state :=
@@ -497,12 +529,20 @@ Fixpoint jit_core (l: list bpf_instruction) (st: jit_state): option jit_state :=
 
 (** * Store Stage: Store selected arm32 registers into corresponding BPF registers *)
 
-Definition jit_alu32_thumb_upd_store (r: reg) (str_l: list reg) (st: jit_state): option jit_state :=
-  if list_in_bool reg_eqb r str_l then
+
+Definition jit_alu32_thumb_upd_store (r: reg) (st: jit_state): option jit_state :=
     let int_r   := Int.repr (Z.of_nat (reg2nat r)) in
-      jit_alu32_thumb_load_store_template_jit STR_I_OP int_r (Int.repr 12) (Int.mul int_r (Int.repr 8)) st
-  else
-    Some st.
+      jit_alu32_thumb_load_store_template_jit STR_I_OP int_r (Int.repr 12) (Int.mul int_r (Int.repr 8)) st.
+
+Fixpoint jit_alu32_thumb_store (str_l: list reg) (st: jit_state): option jit_state :=
+  match str_l with
+  | [] => Some st
+  | hd :: tl =>
+    match jit_alu32_thumb_upd_store hd st with
+    | Some st1 => jit_alu32_thumb_store tl st1
+    | None => None
+    end
+  end.
 
 (** @input
   * @jl : a part of the thumb state
@@ -512,7 +552,7 @@ Definition jit_alu32_thumb_upd_store (r: reg) (str_l: list reg) (st: jit_state):
   * @output
   * @jl: new value of stack offset, pc and binary code
   *)
-
+(*
 Definition jit_alu32_thumb_store (str_l: list reg) (st: jit_state): option jit_state :=
   match jit_alu32_thumb_upd_store R0 str_l st with
   | Some R0_st =>
@@ -555,7 +595,7 @@ Definition jit_alu32_thumb_store (str_l: list reg) (st: jit_state): option jit_s
     end
   | None => None
   end.
-
+*)
 
 (** * Reloading Stage: recover the initial value of selected arm32 registers *)
 Definition jit_alu32_thumb_upd_reset (r: reg) (ldr_l str_l: list reg) (st: jit_state): option jit_state :=
@@ -626,16 +666,19 @@ Definition jit_alu32_to_thumb (l: list bpf_instruction) (st: jit_state): option 
       | Some str_l =>
         match jit_alu32_pre st1 with
         | Some thumb_pre =>
-          match jit_alu32_thumb_save ldr_l str_l thumb_pre with
-          | Some thumb_save =>
-            match jit_alu32_thumb_load ldr_l thumb_save with
-            | Some thumb_load =>
-              match jit_core l thumb_load with
-              | Some thumb_core =>
-                match jit_alu32_thumb_store str_l thumb_core with
-                | Some thumb_store =>
-                  match jit_alu32_thumb_reset ldr_l str_l thumb_store with
-                  | Some thumb_reset => jit_alu32_post thumb_reset
+          let csr_l := jit_alu32_stack_list ldr_l str_l thumb_pre in
+            match jit_alu32_thumb_save csr_l thumb_pre with
+            | Some thumb_save =>
+              match jit_alu32_thumb_load ldr_l thumb_save with
+              | Some thumb_load =>
+                match jit_core l thumb_load with
+                | Some thumb_core =>
+                  match jit_alu32_thumb_store str_l thumb_core with
+                  | Some thumb_store =>
+                    match jit_alu32_thumb_reset ldr_l str_l thumb_store with
+                    | Some thumb_reset => jit_alu32_post thumb_reset
+                    | None => None
+                    end
                   | None => None
                   end
                 | None => None
@@ -644,8 +687,6 @@ Definition jit_alu32_to_thumb (l: list bpf_instruction) (st: jit_state): option 
               end
             | None => None
             end
-          | None => None
-          end
         | None => None
         end
       | None => None

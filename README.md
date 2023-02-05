@@ -29,8 +29,6 @@ The whole project is based on the verified rBPF interpreter, we add the followin
 ## Installation
 Following the instructions from the verified rBPF interpreter.
 
-**To avoid any potential issues, we provide a html version of compiled project. (see `/html`)**
-
 ## Build of HAVM
 
 ```shell

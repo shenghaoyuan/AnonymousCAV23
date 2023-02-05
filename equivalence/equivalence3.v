@@ -364,7 +364,7 @@ see `monadicmodel2/ConcreteState.v`
         + eapply Mem.load_store_same in Hstore; eauto.
         + unfold State.eval_reg.
           simpl.
-          rewrite eval_upd_reg_same.
+          rewrite Regs.eval_upd_reg_same.
           reflexivity.
       }
 
@@ -389,7 +389,7 @@ see `monadicmodel2/ConcreteState.v`
         all: exfalso; apply Hreg_neq; reflexivity.
       + unfold State.eval_reg in *.
         simpl.
-        rewrite eval_upd_reg_other.
+        rewrite Regs.eval_upd_reg_other.
         assumption.
         intuition.
     - (**r mperm *)

@@ -230,6 +230,8 @@ Proof.
   rewrite Int.eq_true.
   reflexivity.
 Qed.
+(**r TODO: we admit the following lemmas, because the proof stategy is same to `lemma_thumb_add_reg`, 
+  so it will be very boring, we prove those lemmas later *)
 
 Lemma lemma_thumb_ldr :
   forall st0 st1 rt rn i arm_blk ofs0
@@ -245,5 +247,20 @@ Lemma lemma_thumb_ldr :
       find_instr (Vptr arm_blk (Ptrofs.repr ofs0)) (jit_mem st1) = Some (Pldr rt rn (SOimm (Int.repr i)), true).
 Proof.
   intros.
-  
+Admitted.
+
+Lemma lemma_thumb_str :
+  forall st0 st1 rt rn i arm_blk ofs0
+    (Himm_max: 0 <= i <= 4096)
+    (Harm_blk : jitted_list st0 = Vptr arm_blk Ptrofs.zero)
+    (Hofs0 : ofs0 = Z.of_nat (jitted_len st0 + (jitted_len st0 + 0)))
+    (Hupd_load : match upd_jitted_list (encode_arm32 (int_of_ireg rn) STR_I_OP 0 4) st0 with
+            | Some str_st =>
+                upd_jitted_list
+                  (encode_arm32 (int_of_ireg rt) (Int.repr i) 12 4) str_st
+            | None => None
+            end = Some st1),
+      find_instr (Vptr arm_blk (Ptrofs.repr ofs0)) (jit_mem st1) = Some (Pstr rt rn (SOimm (Int.repr i)), true).
+Proof.
+  intros.
 Admitted.

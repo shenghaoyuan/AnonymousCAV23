@@ -10,6 +10,7 @@ From bpf.jit.thumb Require Import Arm32Reg ThumbJITOpcode ThumbInsOp.
 
 From bpf.jit.verification Require Import rBPFSemInd JITSimple JITSimpleProof0 JITSimpleProofCore.
 From bpf.jit.simulation Require Import BitfieldLemma.
+From bpf.jit.verification Require Import JITSimpleProofAdm.
 
 From Coq Require Import List ZArith Arith String Lia.
 Import ListNotations.
@@ -629,7 +630,7 @@ Proof.
 Qed.
 
 
-Section JITPreSpillingLoad.
+Section JITPreSpillingLoadStoreReloadingPost.
   Variable ge : genv.
 
   (** Definition *)
@@ -1405,18 +1406,546 @@ Qed.
       inversion H.
   Qed.
 
-End JITPreSpillingLoad.
+  (** * Spilling Stage *)
+
+  Lemma jit_spilling_one_simulation: forall r (*l v*) m1 rbpf_st jit_st0 jit_st1 jit_st_final arm_blk rs0 rs1 ofs0 ofs1
+    (Hupd_load : jit_alu32_thumb_upd_save r jit_st0 = Some jit_st1)
+(*
+    (Hlist_not_in: ~ List.In r l) *)
+    (Hblk_eq: arm_blk = jit_blk)
+    (Hvalid_blk: Mem.valid_block (jit_mem jit_st1) jit_state_blk)
+    (Hblk_neq: arm_blk <> jit_state_blk)
+    (Hblk_neq1: arm_blk <> regs_blk)
+    (Hlayout: regs_layout rbpf_st jit_st0 regs_blk)
+    (Hunchanged: Mem.unchanged_on (fun b _ => b <> jit_blk) (jit_mem jit_st1) (jit_mem jit_st_final))
+
+    (Hmem: sub_mem (jit_mem jit_st1) (jit_mem jit_st_final) jit_blk ofs1)
+
+    (Hmem0: sub_mem m1 (jit_mem jit_st_final) jit_blk ofs1) (**r we need say the relation between updated-stack memory and final memory *)
+    (Hofs0 : ofs0 = Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)))
+    (Hofs1 : ofs1 = Z.of_nat (jitted_len jit_st1 + (jitted_len jit_st1 + 0)))
+    (Harm_blk : jitted_list jit_st0 = Vptr arm_blk Ptrofs.zero) (*
+    (Harm_st0 : jitted_arm_initial_state_load rs0 (Ptrofs.repr ofs0)) *)
+    (Hmatch_st0 : match_state_jit rbpf_st jit_st0)
+
+    (Hst: match_state_core rbpf_st [] arm_blk ofs0 jit_st_final (State rs0 (jit_mem jit_st_final)))
+    (*
+    (Hreg_rv : (eval_reg r rbpf_st) = Some (Val.longofintu (Vint v))) *)
+    (Hrs1_eq: (nextinstr true rs0) = rs1)
+    (Hm0m1: Mem.storev Mint32 (jit_mem jit_st_final)
+          (Val.add (rs0 IR13) (Vint (Int.mul (int_of_ireg r) (Int.repr 4)))) (rs0#r) = Some m1)
+    ,
+      match_state_jit rbpf_st jit_st1 /\
+      star BinSem.step ge (State rs0 (jit_mem jit_st_final)) E0 (State rs1 m1) /\
+      match_state_core rbpf_st [] arm_blk ofs1 (upd_jit_mem m1 jit_st_final) (State rs1 m1).
+  Proof.
+    intros.
+    subst rs1.
+
+    unfold jit_alu32_thumb_upd_save in Hupd_load.
+    unfold jit_alu32_thumb_load_store_template_jit in Hupd_load. (*
+    unfold jitted_arm_initial_state_load in Harm_st0.
+    destruct Harm_st0 as (Hrs_12 & Hrs_pc). *)
+    remember (State rs0 (jit_mem jit_st_final)) as arm_st0.
+    remember [] as l.
+    destruct Hst as [l rbpf_st arm_rs jit_st_final arm_blk ofs0].
+    injection Heqarm_st0 as Hrs_eq.
+    subst arm_rs l.
+    rewrite <- Hblk_eq in *.
+    split.
+    (**r match_state_jit *)
+    {
+      destruct upd_jitted_list eqn: Hupd; [| inversion Hupd_load].
+      eapply upd_jitted_list_match_state_jit in Hupd; eauto.
+      eapply upd_jitted_list_match_state_jit; eauto.
+    }
 
 
-Section JITStoreReloadingPost.
-  Variable ge : genv.
+    apply upd_jitted_list_jittted_len_2 in Hupd_load as Hlen_eq.
 
-  (** Axiom *)
+    assert (Hcond: (2 * jitted_len jit_st0 <= 1000)%nat). {
+      simpl.
+      unfold upd_jitted_list, upd_jitted_list' in Hupd_load.
+      destruct (2 * jitted_len jit_st0 + 4 <=? JITTED_LIST_MAX_LENGTH)%nat eqn: Hcond1; [| inversion Hupd_load].
+      clear Hupd_load.
+      unfold JITTED_LIST_MAX_LENGTH in Hcond1.
+      rewrite Nat.leb_le in Hcond1.
+      lia.
+    }
 
-  Variable lemma_jitted_list_is_vptr: forall st,
-    exists b, jitted_list st = Vptr b Ptrofs.zero.
-  Variable lemma_max_jitted_len: forall st,
-    (jitted_len st <= 500)%nat.
+    assert (Hlen_eq0: Ptrofs.unsigned (Ptrofs.repr (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)))) = 
+        (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)))). {
+      rewrite Ptrofs.unsigned_repr.
+      reflexivity.
+      change Ptrofs.max_unsigned with 4294967295; lia.
+    }
 
-  (** Definition *)
-End JITStoreReloadingPost.
+    split.
+    { (**r star BinSem.step *)
+      eapply star_one.
+      eapply exec_step_bin.
+      - (**r find_instr *)
+        rewrite HPC_eq.
+
+        assert (Heq: find_instr (Vptr arm_blk (Ptrofs.repr ofs0)) (jit_mem jit_st_final) =
+                      find_instr (Vptr arm_blk (Ptrofs.repr ofs0)) (jit_mem jit_st1)). {
+          unfold find_instr.
+          rewrite Hofs0; simpl.
+          clear - flag_blk regs_blk jit_blk jit_state_blk Hofs1 Hupd_load Hmem Hcond Hlen_eq Hlen_eq0.
+          unfold sub_mem in Hmem.
+          repeat rewrite <- Hmem.
+
+          3:{
+            rewrite Hofs1.
+            rewrite Hlen_eq0.
+            simpl.
+            lia.
+          }
+
+          2:{
+            simpl.
+            unfold Ptrofs.add, Ptrofs.of_int.
+            rewrite Hlen_eq0.
+            change (Ptrofs.unsigned (Ptrofs.repr (Int.unsigned (Int.repr 2)))) with 2.
+
+            assert (Hlen_eq1: Ptrofs.unsigned (Ptrofs.repr 
+                  (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)) + 2))  = 
+                (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)) + 2)). {
+              rewrite Ptrofs.unsigned_repr.
+              reflexivity.
+              change Ptrofs.max_unsigned with 4294967295; lia.
+            }
+            rewrite Hlen_eq1.
+            lia.
+          }
+          reflexivity.
+        }
+
+        rewrite Heq; clear Heq.
+
+        instantiate (2 := Pstr r IR13 (SOimm (Int.mul (int_of_ireg r) (Int.repr 4)))).
+        instantiate (1 := true).
+        eapply lemma_thumb_str; eauto.
+        change (Int.unsigned (Int.repr 4)) with 4.
+        unfold int_of_ireg.
+        rewrite Int.unsigned_repr.
+        + destruct r; simpl; lia.
+        + change Int.max_unsigned with 4294967295; destruct r; simpl; lia.
+      - (**r exec_instr *)
+        simpl. (*
+        rewrite Hrs_12; simpl. *)
+        unfold exec_store; simpl.
+        rewrite Hm0m1.
+        reflexivity.
+    }
+
+    { (**r match_state_core rbpf_st [] *)
+      remember (upd_jit_mem m1 jit_st_final) as m2.
+      assert (Hm1_eq: m1 = jit_mem m2). {
+        rewrite Heqm2.
+        unfold upd_jit_mem; simpl.
+        reflexivity.
+      }
+      rewrite Hm1_eq.
+      eapply exec_step.
+      - unfold regs_agree in *.
+        intros.
+        inversion H.
+      - unfold nextinstr.
+        rewrite Pregmap.gss.
+        unfold Val.offset_ptr.
+        rewrite <- Hlen_eq in Hofs1.
+        rewrite Hofs0 in HPC_eq.
+        rewrite HPC_eq, Hofs1.
+        assert (Heq: (Z.of_nat (S (S (jitted_len jit_st0)) + (S (S (jitted_len jit_st0)) + 0))) = 
+            (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0))) + 4) by lia.
+        rewrite Heq; clear Heq.
+        simpl.
+        f_equal.
+        unfold wsize, Ptrofs.add.
+        change (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
+        rewrite Ptrofs.unsigned_repr.
+        reflexivity.
+        change Ptrofs.max_unsigned with 4294967295; simpl; lia.
+    }
+  Qed.
+
+Fixpoint build_rs_stack (l: list ireg) (m: mem) (rs: Asm.regset): option mem :=
+  match l with
+  | [] => Some m
+  | r :: tl =>
+    match Mem.storev Mint32 m (Val.add rs#IR13 (Vint (Int.mul (int_of_ireg r) (Int.repr 4)))) (rs r) with
+    | Some m' => build_rs_stack tl m' (nextinstr true rs)
+    | None => None
+    end
+  end.
+(*
+  Lemma jit_spilling_simulation: forall l3 l1 l2 l rbpf_st jit_st0 jit_st1 jit_st_final rs0 (* rs1 *) ofs0 ofs1 m1
+    (Hldr: jit_alu32_load_list l = Some l1)
+    (Hstr: jit_alu32_store_list l = Some l2)
+    (Hcsr: jit_alu32_stack_list l1 l2 jit_st0 = l3)
+    (Hjit_load: jit_alu32_thumb_save l3 jit_st0 = Some jit_st1)
+    (Hofs0: ofs0 = (Z.of_nat (2 * (jitted_len jit_st0))))
+    (Hofs1: ofs1 = (Z.of_nat (2 * (jitted_len jit_st1))))
+    (Harm_blk: jitted_list jit_st0 = Vptr jit_blk Ptrofs.zero)
+    (Hmem: sub_mem (jit_mem jit_st1) (jit_mem jit_st_final) jit_blk ofs1)
+
+    (Hunchanged: Mem.unchanged_on (fun (b : block) (_ : Z) => b <> jit_blk) (jit_mem jit_st0) (jit_mem jit_st_final))
+
+    (Hst: match_state_jit rbpf_st jit_st0)
+    (Harm_st0: jitted_arm_initial_state_load rs0 (Ptrofs.repr ofs0))
+    (Hrs1_eq: build_rs_stack l3 (jit_mem jit_st_final) rs0 = Some m1),
+      (* exists rs1, *)
+        match_state_jit rbpf_st jit_st1 /\
+        star BinSem.step ge (State rs0 (jit_mem jit_st_final)) E0 (State rs0 m1) /\
+        match_state_core rbpf_st [] jit_blk ofs1 (upd_jit_mem m1 jit_st_final) (State rs0 m1).
+  Proof.
+    induction l3.
+    { (**r l = [] *)
+      simpl; intros.
+      injection Hrs1_eq as Hrs_eq; subst m1.
+      injection Hjit_load as Hst_eq; subst jit_st1.
+      split; [assumption | ].
+      split.
+      - econstructor; eauto.
+      -
+        assert (Heq: (upd_jit_mem (jit_mem jit_st_final) jit_st_final) = jit_st_final). {
+          unfold upd_jit_mem; simpl.
+          destruct jit_st_final;
+          reflexivity.
+        }
+        rewrite Heq; clear Heq.
+        constructor.
+        + unfold regs_agree; simpl; intros.
+          inversion H.
+        + unfold jitted_arm_initial_state_load in Harm_st0.
+          destruct Harm_st0 as (_ & Heq).
+          rewrite Heq, Hofs1, Hofs0.
+          reflexivity.
+    }
+    (**r l <> [] *)
+    simpl; intros.
+
+    apply nodup_stack in Hcsr as Hnodup_stack.
+
+    destruct jit_alu32_thumb_upd_save eqn: Hupd_load in Hjit_load; [| inversion Hjit_load].
+    rename j into jit_stk.
+
+    (**rwe need say the relation between stack and updated stack *)
+...
+    assert (Hexists_l: exists lr, jit_alu32_stack_list lr = Some l1 \/ ...). {
+      eapply jit_alu32_stack_list_tl; eauto.
+    }
+    destruct Hexists_l as (lr & Hexists_l).
+    specialize (IHl1 lr rbpf_st jit_stk jit_st1 jit_st_final).
+
+    destruct jit_alu32_load_list eqn: Hnl1 in Hldr; [| inversion Hldr].
+    rename l0 into nl1.
+
+    assert (Hreg_val: exists v, eval_reg a rbpf_st = Some (Val.longofintu (Vint v))). {
+      destruct Hst.
+      unfold match_registers in mregs0.
+      destruct mregs0 as (Hreg_blk & Hjit_blk & Hmregs0).
+      specialize (Hmregs0 a).
+      destruct Hmregs0 as (vi & Heval_reg & _).
+      exists vi. assumption.
+    }
+
+    destruct Hreg_val as (v & Hreg_val).
+
+    eapply jit_load_one_simulation with
+      (rbpf_st := rbpf_st) (l := []) (v := v) (jit_st_final := jit_st_final) in Hupd_load as Hone_step; eauto.
+    - destruct Hone_step as (Hmatch_state & Hstar & Hmatch_core).
+      remember ((rs0 # (ireg_of_reg a) <- (Vint v)) # PC <-
+             (Val.offset_ptr (rs0 # (ireg_of_reg a) <- (Vint v) PC) wsize)) as rsk.
+      rewrite Hreg_val in Hrs1_eq.
+      unfold Val.longofintu in Hrs1_eq.
+      specialize (IHl1 rsk rs1).
+
+      specialize (IHl1  (Z.of_nat (2 * jitted_len jit_stk)) ).
+      specialize (IHl1 (Z.of_nat (2 * jitted_len jit_st1)) ).
+      specialize (IHl1 Hexists_l Hjit_load).
+
+      assert (Heq: Z.of_nat (2 * jitted_len jit_stk) = Z.of_nat (2 * jitted_len jit_stk)) by reflexivity.
+      specialize (IHl1 Heq); clear Heq.
+
+      assert (Heq: Z.of_nat (2 * jitted_len jit_st1) = Z.of_nat (2 * jitted_len jit_st1)) by reflexivity.
+      specialize (IHl1 Heq); clear Heq.
+
+      assert (Heq: jitted_list jit_stk = Vptr jit_blk Ptrofs.zero). {
+        unfold jit_alu32_thumb_upd_load in Hupd_load.
+        unfold jit_alu32_thumb_load_store_template_jit in Hupd_load.
+        apply upd_jitted_list_unchange_jittted_list_2 in Hupd_load.
+        rewrite <- Hupd_load.
+        assumption.
+      }
+      specialize (IHl1 Heq); clear Heq.
+      simpl in IHl1.
+      rewrite Hofs1 in Hmem; specialize (IHl1 Hmem).
+      assert (Heq: Mem.unchanged_on (fun (b : block) (_ : Z) => b <> jit_blk) 
+         (jit_mem jit_stk) (jit_mem jit_st_final)). {
+        eapply mem_unchanged_on_store; eauto.
+      }
+      specialize (IHl1 Heq); clear Heq.
+
+      specialize (IHl1 Hmatch_state).
+
+      unfold jit_alu32_thumb_upd_load in Hupd_load.
+      unfold jit_alu32_thumb_load_store_template_jit in Hupd_load.
+      apply upd_jitted_list_jittted_len_2 in Hupd_load as Hlen_eq.
+
+      assert (Hcond: (2 * jitted_len jit_st0 <= 1000)%nat). {
+        simpl.
+        unfold upd_jitted_list, upd_jitted_list' in Hupd_load.
+        destruct (2 * jitted_len jit_st0 + 4 <=? JITTED_LIST_MAX_LENGTH)%nat eqn: Hcond1; [| inversion Hupd_load].
+        clear Hupd_load.
+        unfold JITTED_LIST_MAX_LENGTH in Hcond1.
+        rewrite Nat.leb_le in Hcond1.
+        lia.
+      }
+
+      assert (Hcond2: ( (2 * (jitted_len jit_st0)) + 4 <= 1000)%nat). {
+        simpl.
+        unfold upd_jitted_list, upd_jitted_list' in Hupd_load.
+        destruct (2 * jitted_len jit_st0 + 4 <=? JITTED_LIST_MAX_LENGTH)%nat eqn: Hcond1; [| inversion Hupd_load].
+        clear Hupd_load.
+        unfold JITTED_LIST_MAX_LENGTH in Hcond1.
+        rewrite Nat.leb_le in Hcond1.
+        lia.
+      }
+
+      assert (Hlen_eq0: Ptrofs.unsigned (Ptrofs.repr (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)))) = 
+          (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)))). {
+        rewrite Ptrofs.unsigned_repr.
+        reflexivity.
+        change Ptrofs.max_unsigned with 4294967295; lia.
+      }
+
+      assert (Heq: jitted_arm_initial_state_load rsk
+         (Ptrofs.repr (Z.of_nat (jitted_len jit_stk + (jitted_len jit_stk + 0))))). {
+        unfold jitted_arm_initial_state_load.
+        unfold jitted_arm_initial_state_load in Harm_st0.
+        rewrite <- Hlen_eq.
+        rewrite Heqrsk.
+
+        destruct Harm_st0 as (Hrs_12 & Hrs_pc).
+        split.
+        - rewrite Pregmap.gso.
+          2:{ intros HF; inversion HF. }
+          rewrite Pregmap.gso.
+          2:{ unfold ireg_of_reg; intros HF; destruct a; inversion HF. }
+          assumption.
+        - rewrite Pregmap.gss.
+          rewrite Pregmap.gso.
+          2:{ unfold ireg_of_reg; intros HF; destruct a; inversion HF. }
+          rewrite Hrs_pc.
+          assert (Heq: Z.of_nat (S (S (jitted_len jit_st0)) + (S (S (jitted_len jit_st0)) + 0)) = 
+            (Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0))) + 4) by lia.
+          rewrite Heq; clear Heq.
+          simpl.
+          unfold Ptrofs.add, wsize.
+          f_equal.
+          change (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
+          rewrite Hofs0.
+          rewrite Ptrofs.unsigned_repr.
+          reflexivity.
+          change Ptrofs.max_unsigned with 4294967295; lia.
+      }
+      specialize (IHl1 Heq); clear Heq.
+
+      rewrite Int64.int_unsigned_repr in Hrs1_eq.
+      rewrite Int.repr_unsigned in Hrs1_eq.
+      rewrite <- Heqrsk in Hrs1_eq.
+
+      specialize (IHl1 Hrs1_eq).
+
+      destruct IHl1 as (Hmatch_state_k & Hstar_k & Hmatch_core_k).
+
+      split; [ assumption | ].
+      split.
+      + eapply star_trans with (s2 := (State rsk (jit_mem jit_st_final))) (t1 := E0); eauto.
+      +
+        eapply exec_step.
+        { (**r regs_agree *)
+
+          clear Hstar Hunchanged Hmem.
+          clear Hst Hmatch_state Harm_st0 Hmatch_state_k.
+          rewrite <- Hofs1 in Hmatch_core_k.
+          remember (State rs1 (jit_mem jit_st_final)) as arm_st1.
+          induction Hmatch_core_k as [l1 rbpf_st rs1' jit_st_final jit_blk ofs1].
+          injection Heqarm_st1 as Hrs1'_eq.
+          subst rs1'.
+          remember [a] as l0.
+          remember (Z.of_nat (jitted_len jit_stk + (jitted_len jit_stk + 0))) as ofsk.
+          remember (State rsk (jit_mem jit_st_final)) as arm_stk.
+          induction Hmatch_core as [l0 rbpf_st rsk' jit_st_final jit_blk ofsk].
+
+          injection Heqarm_stk as Hrsk_eq.
+          subst rsk'.
+
+          rewrite Heql0 in Hreg_agree0.
+          rewrite Heqofsk in HPC_eq0.
+          apply NoDup_cons_iff in Hnodup_load.
+          clear - Hnodup_load Hreg_agree Hreg_agree0 Hrs1_eq.
+
+          assert (Heq: regs_agree [a] rbpf_st rs1). {
+            eapply build_rs_one; eauto.
+          }
+
+          clear - Hreg_agree Heq.
+          apply regs_agree_trans; auto.
+        }
+
+        { (**r rs PC *)
+          clear - Hnl1 Hldr Hlen_eq Hjit_load Harm_st0 Hrs1_eq Heqrsk Hofs0 Hofs1 Hmatch_core Hcond Hcond2 Hlen_eq0.
+          unfold jitted_arm_initial_state_load in Harm_st0.
+          destruct Harm_st0 as (_ & Hrs0_eq).
+
+          remember (Z.of_nat (jitted_len jit_stk + (jitted_len jit_stk + 0))) as ofsk.
+          rename Heqofsk into Hofsk.
+
+          assert (Heq: rsk PC = Vptr jit_blk (Ptrofs.repr ofsk)). {
+            rewrite Hofsk.
+            rewrite Heqrsk.
+            rewrite Pregmap.gss.
+            rewrite Pregmap.gso.
+            2:{ intros HF; inversion HF. }
+            rewrite Hrs0_eq.
+            simpl; unfold wsize, Ptrofs.add.
+            f_equal.
+            change (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
+            rewrite <- Hlen_eq.
+            assert (Heq: (Z.of_nat (S (S (jitted_len jit_st0)) + (S (S (jitted_len jit_st0)) + 0))) = 
+              Z.of_nat (jitted_len jit_st0 + (jitted_len jit_st0 + 0)) + 4) by lia.
+            rewrite Heq; clear Heq.
+            rewrite Hofs0.
+            rewrite Ptrofs.unsigned_repr.
+            reflexivity.
+            change Ptrofs.max_unsigned with 4294967295; lia.
+          }
+
+          eapply jit_alu32_thumb_load_st_max in Hjit_load as Hrange.
+          2:{
+            rewrite <- Hlen_eq.
+            unfold JITTED_LIST_MAX_LENGTH.
+            lia.
+          }
+
+          apply jit_alu32_thumb_load_jitted_len in Hjit_load.
+          eapply build_rs_pc in Hrs1_eq; eauto.
+          - rewrite Hrs1_eq.
+            f_equal.
+            rewrite Hofs1.
+            rewrite Hjit_load.
+            rewrite Hofsk.
+            rewrite <- Hlen_eq.
+            assert (Heq1: (Z.of_nat (S (S (jitted_len jit_st0)) + (S (S (jitted_len jit_st0)) + 0)) +
+   Z.of_nat (Datatypes.length l1) * 4) =
+              (Z.of_nat
+     (S (S (jitted_len jit_st0)) + Datatypes.length l1 * 2 +
+      (S (S (jitted_len jit_st0)) + Datatypes.length l1 * 2 + 0)))) by lia.
+            rewrite Heq1; clear Heq1.
+            reflexivity.
+          - rewrite Hofsk.
+            rewrite <- Hlen_eq.
+            split.
+            lia.
+            rewrite Hjit_load in Hrange.
+            rewrite <- Hlen_eq in Hrange.
+            unfold JITTED_LIST_MAX_LENGTH in Hrange.
+            lia.
+          - injection Hldr as Hnl1_eq; subst nl1.
+            apply nodup_load in Hnl1.
+            apply NoDup_cons_iff in Hnl1.
+            intuition.
+        }
+
+    - (**r Mem.valid_block *)
+      assert (Hvalid_blk: Mem.valid_block (jit_mem jit_st0) jit_state_blk). {
+        destruct Hst.
+        destruct minvalid0 as (_ & Hblk_neq0 & Hblk_neq1 & Hvalid_blk).
+        unfold memory_layout_jit_state in mvalid0.
+        destruct mvalid0 as (mvalid0 & _).
+        apply rBPFMemType.load_valid_block in mvalid0.
+        assumption.
+      }
+      assert (Hneq: jit_blk <> jit_state_blk). {
+        destruct Hst.
+        clear - minvalid0.
+        destruct minvalid0 as (_ & _ & Hneq & _).
+        intuition.
+      }
+      clear - Hupd_load Harm_blk Hvalid_blk Hneq.
+      unfold jit_alu32_thumb_upd_load in Hupd_load.
+      unfold jit_alu32_thumb_load_store_template_jit in Hupd_load.
+      destruct upd_jitted_list eqn: Hupd0; [| inversion Hupd_load].
+      rename j into stk.
+      eapply upd_jitted_list_unchange_jittted_list in Hupd0 as Harm_stk; eauto.
+      eapply upd_jitted_list_valid_blk in Hupd0; eauto.
+      eapply upd_jitted_list_valid_blk in Hupd_load; eauto.
+      rewrite <- Harm_stk.
+      assumption.
+    - (**r jit_blk <> jit_state_blk *)
+      destruct Hst.
+      destruct minvalid0 as (_ & _ & Hblk_neq1 & Hvalid_blk).
+      destruct Hblk_neq1 as (_ & Hblk_neq1 & _).
+      apply Hblk_neq1.
+    - (**r jit_blk <> regs_blk *)
+      destruct Hst.
+      destruct minvalid0 as (_ & Hblk_neq1 & _).
+      destruct Hblk_neq1 as (_ & _ & Hblk_neq1).
+      apply Hblk_neq1.
+    - (**r regs_layout *)
+      unfold regs_layout.
+      intros.
+      destruct Hst.
+      unfold match_registers in mregs0.
+      destruct mregs0 as (Hreg_blk0 & Hreg_blk1 & Hmregs).
+      specialize (Hmregs r).
+      destruct Hmregs as (vi & Heval_reg & Heval_jit_reg).
+      exists vi.
+      split; [ assumption | ].
+      unfold eval_jit_reg in Heval_jit_reg.
+      rewrite Hreg_blk1 in Heval_jit_reg.
+      remember (8 * id_of_reg r) as rv.
+      simpl in Heval_jit_reg.
+      rewrite Ptrofs.add_zero_l in Heval_jit_reg.
+      assert (Heq: Ptrofs.unsigned (Ptrofs.of_int (Int.repr rv)) = rv). {
+        subst rv.
+        unfold Ptrofs.of_int.
+        rewrite Int.unsigned_repr.
+        rewrite Ptrofs.unsigned_repr.
+        change Ptrofs.max_unsigned with 4294967295; destruct r; simpl; lia.
+        change Ptrofs.max_unsigned with 4294967295; destruct r; simpl; lia.
+        change Int.max_unsigned with 4294967295; destruct r; simpl; lia.
+      }
+      rewrite Heq in Heval_jit_reg; clear Heq.
+      simpl.
+      assumption.
+    - (**r Mem.unchanged_on *)
+      eapply mem_unchanged_on_store; eauto.
+    - (**r sub_mem: see proofcore *)
+      eapply jit_alu32_thumb_upd_load_unchange_jittted_list in Hupd_load.
+      rewrite Hupd_load in Harm_blk.
+      clear - Hofs1 Harm_blk Hjit_load Hmem.
+      assert (Hle: Z.of_nat (2 * jitted_len jit_stk) <= Z.of_nat (2 * jitted_len jit_st1)). {
+        clear - Hjit_load.
+        eapply jit_alu32_thumb_load_jitted_len in Hjit_load; eauto.
+        lia.
+      }
+
+      eapply jit_load_sub_mem in Hjit_load; eauto.
+      subst ofs1.
+      eapply sub_mem_less_than with (ofs1 := Z.of_nat (2 * jitted_len jit_stk)) in Hmem; eauto.
+      eapply sub_mem_trans; eauto.
+    - (**r match_state_core *)
+      unfold jitted_arm_initial_state_load in Harm_st0.
+      destruct Harm_st0 as (Hrs_12 & Hrs_pc).
+      eapply exec_step; eauto.
+
+      unfold regs_agree.
+      intros.
+      inversion H.
+    *)
+
+End JITPreSpillingLoadStoreReloadingPost.

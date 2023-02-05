@@ -1,0 +1,458 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Module BinDecode</title>
+<meta name="description" content="Documentation of Coq module BinDecode" />
+<link href="coq2html.css" rel="stylesheet" type="text/css" />
+<script type="text/javascript" src="coq2html.js"> </script>
+</head>
+
+<body onload="hideAll('proofscript')">
+<h1 class="title">Module BinDecode</h1>
+<div class="coq">
+<br/>
+<br/>
+<span class="kwd">Require</span> <span class="kwd">Import</span> <span class="id"><a href="compcert.lib.Integers.html">Integers</a></span> <span class="id"><a href="compcert.lib.Coqlib.html">Coqlib</a></span>.<br/>
+<span class="kwd">Require</span> <span class="kwd">Import</span> <span class="id"><a href="compcert.arm.AsmSyntax.html">AsmSyntax</a></span>.<br/>
+<span class="kwd">Require</span> <span class="kwd">Import</span> <span class="id"><a href="compcert.arm.BinSyntax.html">BinSyntax</a></span>.<br/>
+<br/>
+<div class="doc">The following axiom needs to be implemented.
+    This is the ARM 32 bits decoding function.
+    It can be partial...
+Axiom decode : int -&gt; option instruction. </div>
+<br/>
+<br/>
+<h1> THUMB/THUMB2 Decode </h1>
+<br/>
+<div class="doc">There are many encoding ways for ARM32, here we adopt `encoding T1/T2/T3` for Thumb ISA.
+</div>
+<br/>
+<br/>
+<div class="doc">We only consider the following instructions
+0) THUMB 16-bit (0x15_10: 010001)
+<ul>
+<li>
+ ADD_REG
+</li>
+<li>
+ MOV_REG
+</li>
+<li>
+ CMP_REG
+</li>
+<li>
+ BX
+</li>
+</ul>
+1) THUMB2 32-bit
+  1.1) ALU_REG (op15_11 = 11101)
+  - AND_REG
+  - EOR_REG
+  - ORR_REG
+  - RSB_REG
+  - SUB_REG
+  1.2) ALU_IMM (op15 = 11110)
+  - ADD_IMM
+  - AND_IMM
+  - EOR_IMM
+  - ORR_IMM
+  - RSB_IMM
+  - SUB_IMM
+  - MOVW
+  - MOVT
+  - CMP_IMM
+  1.3) MEM_IMM &amp; MEM_REG &amp; ALU (op15_11= 11111)
+  - LDR_IMM
+  - STR_IMM
+  - LDR_REG
+  - STR_REG
+  - UDIV
+  - MUL
+  - ASR_REG
+  - LSL_REG
+  - LSR_REG </div>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="ireg_eqb">ireg_eqb</a></span> (<span class="id">r0</span> <span class="id">r1</span>: <span class="id"><a href="compcert.arm.AsmSyntax.html#ireg">ireg</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#bool">bool</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">r0</span>, <span class="id">r1</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR1">IR1</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR1">IR1</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR2">IR2</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR2">IR2</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR3">IR3</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR3">IR3</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR4">IR4</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR4">IR4</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR5">IR5</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR5">IR5</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR6">IR6</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR6">IR6</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR7">IR7</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR7">IR7</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR8">IR8</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR8">IR8</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR9">IR9</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR9">IR9</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR10">IR10</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR10">IR10</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR11">IR11</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR11">IR11</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR12">IR12</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR12">IR12</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR13">IR13</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR13">IR13</a></span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="compcert.arm.AsmSyntax.html#IR14">IR14</a></span>, <span class="id"><a href="compcert.arm.AsmSyntax.html#IR14">IR14</a></span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span><br/>
+&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#false">false</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">end</span>.<br/>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="encode_arm32">encode_arm32</a></span> (<span class="id">v</span> <span class="id">ins</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>) (<span class="id">from</span> <span class="id">size</span>: <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#nat">nat</a></span>): <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span> :=<br/>
+&nbsp;&nbsp;<span class="id"><a href="compcert.lib.Integers.html#Int.bitfield_insert">Int.bitfield_insert</a></span> (<span class="id"><a href="http://coq.inria.fr/library/Coq.ZArith.BinInt.html#Z.of_nat">Z.of_nat</a></span> <span class="id">from</span>) (<span class="id"><a href="http://coq.inria.fr/library/Coq.ZArith.BinInt.html#Z.of_nat">Z.of_nat</a></span> <span class="id">size</span>) <span class="id">ins</span> <span class="id">v</span>.<br/>
+<br/>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="decode_arm32">decode_arm32</a></span> (<span class="id">ins</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>) (<span class="id">from</span> <span class="id">size</span>: <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#nat">nat</a></span>): <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span> :=<br/>
+&nbsp;&nbsp;<span class="id"><a href="compcert.lib.Integers.html#Int.unsigned_bitfield_extract">Int.unsigned_bitfield_extract</a></span> (<span class="id"><a href="http://coq.inria.fr/library/Coq.ZArith.BinInt.html#Z.of_nat">Z.of_nat</a></span> <span class="id">from</span>) (<span class="id"><a href="http://coq.inria.fr/library/Coq.ZArith.BinInt.html#Z.of_nat">Z.of_nat</a></span> <span class="id">size</span>) <span class="id">ins</span>.<br/>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="int2ireg">int2ireg</a></span> (<span class="id">r</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#option">option</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#ireg">ireg</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 1) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR1">IR1</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 2) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR2">IR2</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 3) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR3">IR3</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 4) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR4">IR4</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 5) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR5">IR5</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 6) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR6">IR6</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 7) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR7">IR7</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 8) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR8">IR8</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 9) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR9">IR9</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 10) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR10">IR10</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 11) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR11">IR11</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 12) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR12">IR12</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 13) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR13">IR13</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">r</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 14) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR14">IR14</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span>.<br/>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="is_thumb2">is_thumb2</a></span> (<span class="id">ins</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#bool">bool</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 11 5 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1d</span>) <span class="kwd">then</span> <span class="docright">(* 0b11101  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1e</span>) <span class="kwd">then</span> <span class="docright">(* 0b11110  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1f</span>) <span class="kwd">then</span> <span class="docright">(* 0b11111  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#false">false</a></span>.<br/>
+<br/>
+<div class="doc">For THUMB ISA, we only consider the following instructions:
+1. 16-bit (0x15_10: 010001)
+<ul>
+<li>
+ ADD_REG
+</li>
+<li>
+ MOV_REG
+</li>
+<li>
+ CMP_REG
+</li>
+<li>
+ BX
+</li>
+<li>
+ B  </li>
+</ul>
+</div>
+<span class="kwd">Definition</span> <span class="id"><a name="decode_thumb">decode_thumb</a></span> (<span class="id">ins</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#option">option</a></span> <span class="id"><a href="compcert.arm.BinSyntax.html#instruction">instruction</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op15_10</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 10 6 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op15_10</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x11</span>) <span class="kwd">then</span> <span class="docright">(* 0b010001  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 8 2 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rm</span> := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 3 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rn</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 0 3 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">n</span>  := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 7 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rd</span> := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#encode_arm32">encode_arm32</a></span> <span class="id">n</span> <span class="id">rn</span> 3 1) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rd</span>, <span class="id">rm</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rd</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rm</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Padd">Padd</a></span> <span class="id">Rd</span> <span class="id">Rd</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pcmp">Pcmp</a></span> <span class="id">Rd</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>)) <span class="docright">(* here Rd i.e. Rn  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 2) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pmov">Pmov</a></span> <span class="id">Rd</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 3)) (<span class="id"><a href="compcert.arm.BinDecode.html#ireg_eqb">ireg_eqb</a></span> <span class="id">Rd</span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span>) <span class="kwd">then</span> <span class="docright">(* here op must be = 3 &amp;&amp;  Rd = IR0  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pbreg">Pbreg</a></span> <span class="id">Rm</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op15_12</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 12 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op15_12</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xd</span>) <span class="kwd">then</span> <span class="docright">(* 0b1101  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm8</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins</span> 0 8 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> (-128)%<span class="id">Z</span>) <span class="id">imm8</span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id">imm8</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 127)) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pb">Pb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Ptrofs.of_ints">Ptrofs.of_ints</a></span> <span class="id">imm8</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* B offset error!  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span>.<br/>
+<br/>
+<div class="doc">imm12 = i:imm3:imm8
+Now, we say i:imm3=0000 i.e. we don't conside shift
+so imm8 \in <span class="bracket">0, 255</span>
+ </div>
+<span class="kwd">Definition</span> <span class="id"><a name="thumb_constant_range_imm12">thumb_constant_range_imm12</a></span> (<span class="id">i</span> <span class="id">imm3</span> <span class="id">imm8</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#bool">bool</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">i</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">imm3</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="id">imm8</span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id">imm8</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 255))) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#false">false</a></span>.<br/>
+<br/>
+<div class="doc">For THUMB2 ISA, we only consider the following instructions:
+  1.1. ALU_REG (op15_11 = 11101)
+  - AND_REG
+  - EOR_REG
+  - ORR_REG
+  - RSB_REG
+  - SUB_REG
+  1.2. ALU_IMM (op15 = 11110)
+  - ADD_IMM
+  - AND_IMM
+  - EOR_IMM
+  - ORR_IMM
+  - RSB_IMM
+  - SUB_IMM
+  - MOVW
+  - MOVT
+  - CMP_IMM
+  1.3. MEM_IMM &amp; MEM_REG &amp; ALU (op15_11= 11111)
+  - LDR_IMM
+  - STR_IMM
+  - LDR_REG
+  - STR_REG
+  - UDIV
+  - MUL
+  - ASR_REG
+  - LSL_REG
+  - LSR_REG  </div>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="decode_thumb2">decode_thumb2</a></span> (<span class="id">ins_lo</span> <span class="id">ins_hi</span>: <span class="id"><a href="compcert.lib.Integers.html#int">int</a></span>): <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#option">option</a></span> <span class="id"><a href="compcert.arm.BinSyntax.html#instruction">instruction</a></span> :=<br/>
+&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_op15_11</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 11 5 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op15_11</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1d</span>) <span class="kwd">then</span> <span class="docright">(* 0b11101  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_op10_9</span>  := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 9 2 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 5 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_opS</span>     := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 4 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rn</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 0 4) <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">hi_op15_12</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 12 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rd</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 8 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">hi_op7_4</span>   := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 4 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rm</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 0 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op10_9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span>)    <span class="docright">(* lo_10_9 = 0b01  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>))     <span class="docright">(* S = 0  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op15_12</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>)  <span class="docright">(* hi_15_12 = 0b0000  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op7_4</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>))   <span class="docright">(* hi_7_4 = 0b0000  *)</span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span>, <span class="id">rd</span>, <span class="id">rm</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rd</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rm</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pand">Pand</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x2</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Porr">Porr</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x4</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Peor">Peor</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xd</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Psub">Psub</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xe</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Prsb">Prsb</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op15_11</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1e</span>) <span class="kwd">then</span> <span class="docright">(* 0b11110  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">i</span>          := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 10 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_op9</span>     := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 9 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 5 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_opS</span>     := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 4 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm4</span>       := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 0 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rn</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> <span class="id">imm4</span> <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">hi_op15</span>    := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 15 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm3</span>       := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 12 3 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rd</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 8 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm8</span>       := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 0 8 <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm12</span>      := <span class="id"><a href="compcert.arm.BinDecode.html#encode_arm32">encode_arm32</a></span> <span class="id">i</span> (<span class="id"><a href="compcert.arm.BinDecode.html#encode_arm32">encode_arm32</a></span> <span class="id">imm3</span> <span class="id">imm8</span> 8 3) 11 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm16</span>      := <span class="id"><a href="compcert.arm.BinDecode.html#encode_arm32">encode_arm32</a></span> <span class="id">imm4</span> <span class="id">imm12</span> 12 4 <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op15</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span> <span class="docright">(* hi_15 = 0b0  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xd</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span>)) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span>, <span class="id">rd</span> <span class="kwd">with</span> <span class="docright">(* we hope rd = 0b1111 i,e, None  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.arm.BinDecode.html#thumb_constant_range_imm12">thumb_constant_range_imm12</a></span> <span class="id">i</span> <span class="id">imm3</span> <span class="id">imm8</span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pcmp">Pcmp</a></span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* imm12 error  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rd</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rd</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x2</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="id">imm16</span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id">imm16</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 65535)) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pmovw">Pmovw</a></span> <span class="id">Rd</span> <span class="id">imm16</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* imm16 error: 0-65535 for encoding T3  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x6</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="id">imm16</span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id">imm16</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 65535)) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pmovt">Pmovt</a></span> <span class="id">Rd</span> <span class="id">imm16</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* imm16 error: 0-65535 for encoding T3  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.arm.BinDecode.html#thumb_constant_range_imm12">thumb_constant_range_imm12</a></span> <span class="id">i</span> <span class="id">imm3</span> <span class="id">imm8</span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pand">Pand</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x2</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Porr">Porr</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x4</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Peor">Peor</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x8</span>) <span class="kwd">then</span><br/>
+<div class="doc">- encoding T3
+ADD Rd, Rn, #imm12 (= i:imm3:imm8)
+ 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0     1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
+ 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0     5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+ --------------------------------    --------------------------------
+|1 1 1 1 0|i|0|1 0 0 0|S|  Rn   |   |0| imm3|  Rd   |  imm8         |
+ --------------------------------    -------------------------------- </div>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Padd">Padd</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xd</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Psub">Psub</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xe</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Prsb">Prsb</a></span> <span class="id">Rd</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* imm12 error  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* this branch: hi_15 = 0b1  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op15_11</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x1f</span>) <span class="kwd">then</span> <span class="docright">(* 0b11111  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_op10_9</span>  := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 9 2 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">op</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 5 4 <span class="kwd">in</span> <span class="docright">(* let's say lo_8_5 is opcode  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">lo_opS</span>     := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 4 1 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rn</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_lo</span> 0 4) <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">hi_op15_12</span> := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 12 4 <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rt</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> <span class="id">hi_op15_12</span> <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">imm12</span>      := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 0 12 <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rd</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 8 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">hi_op7_4</span>   := <span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 4 4 <span class="kwd">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">let</span> <span class="id">rm</span>         := <span class="id"><a href="compcert.arm.BinDecode.html#int2ireg">int2ireg</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#decode_arm32">decode_arm32</a></span> <span class="id">ins_hi</span> 0 4) <span class="kwd">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op10_9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 2) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span>, <span class="id">rt</span>, <span class="id">rm</span>, <span class="id">rd</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rt</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rm</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rd</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#ireg_eqb">ireg_eqb</a></span> <span class="id">Rd</span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op7_4</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pstr">Pstr</a></span> <span class="id">Rt</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pldr">Pldr</a></span> <span class="id">Rt</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOreg">SOreg</a></span> <span class="id">Rm</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span>, <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x6</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="id">imm12</span>) (<span class="id"><a href="compcert.lib.Integers.html#Int.cmpu">Int.cmpu</a></span> <span class="id"><a href="compcert.lib.Integers.html#Cle">Cle</a></span> <span class="id">imm12</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 4095)) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span>, <span class="id">rt</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rt</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pstr">Pstr</a></span> <span class="id">Rt</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pldr">Pldr</a></span> <span class="id">Rt</span> <span class="id">Rn</span> (<span class="id"><a href="compcert.arm.AsmSyntax.html#SOimm">SOimm</a></span> <span class="id">imm12</span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* imm12 error: 0-4095 for encoding T3  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_op10_9</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id">rn</span>, <span class="id">rm</span>, <span class="id">rd</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rn</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rm</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id">Rd</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op15_12</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xf</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op7_4</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.zero">Int.zero</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Plsl">Plsl</a></span> <span class="id">Rd</span> <span class="id">Rn</span> <span class="id">Rm</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Plsr">Plsr</a></span> <span class="id">Rd</span> <span class="id">Rn</span> <span class="id">Rm</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x2</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pasr">Pasr</a></span> <span class="id">Rd</span> <span class="id">Rn</span> <span class="id">Rm</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">x8</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#Pmul">Pmul</a></span> <span class="id">Rd</span> <span class="id">Rn</span> <span class="id">Rm</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="kwd">if</span> <span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">hi_op7_4</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xf</span>) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">op</span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 0<span class="id">xd</span>)) (<span class="id"><a href="compcert.lib.Integers.html#Int.eq">Int.eq</a></span> <span class="id">lo_opS</span> <span class="id"><a href="compcert.lib.Integers.html#Int.one">Int.one</a></span>))<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#ireg_eqb">ireg_eqb</a></span> <span class="id">Rd</span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#andb">andb</a></span> (<span class="id"><a href="compcert.arm.BinDecode.html#ireg_eqb">ireg_eqb</a></span> <span class="id">Rm</span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR0">IR0</a></span>) (<span class="id"><a href="compcert.arm.BinDecode.html#ireg_eqb">ireg_eqb</a></span> <span class="id">Rn</span> <span class="id"><a href="compcert.arm.AsmSyntax.html#IR1">IR1</a></span>))) <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> <span class="id"><a href="compcert.arm.BinSyntax.html#Pudiv">Pudiv</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>, <span class="id">_</span>, <span class="id">_</span> =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span> <span class="docright">(* this case should be impossible  *)</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span>.<br/>
+<br/>
+<span class="kwd">Require</span> <span class="kwd">Import</span> <span class="id"><a href="compcert.common.Values.html">Values</a></span> <span class="id"><a href="compcert.common.Memory.html">Memory</a></span> <span class="id"><a href="compcert.common.AST.html">AST</a></span>.<br/>
+<br/>
+<span class="kwd">Definition</span> <span class="id"><a name="find_instr">find_instr</a></span> (<span class="id">v</span>:<span class="id"><a href="compcert.common.Values.html#val">val</a></span>) (<span class="id">m</span> : <span class="id"><a href="compcert.common.Memory.html#mem">mem</a></span>) : <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#option">option</a></span> (<span class="id"><a href="compcert.arm.BinSyntax.html#instruction">instruction</a></span> * <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#bool">bool</a></span>) :=<br/>
+&nbsp;&nbsp;<span class="kwd">match</span> <span class="id"><a href="compcert.common.Memory.html#Mem.loadv">Memory.Mem.loadv</a></span> <span class="id"><a href="compcert.common.AST.html#Mint16unsigned">AST.Mint16unsigned</a></span> <span class="id">m</span> <span class="id">v</span> <span class="kwd">with</span><br/>
+&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.common.Values.html#Vint">Vint</a></span> <span class="id">op</span>) =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">if</span> <span class="id"><a href="compcert.arm.BinDecode.html#is_thumb2">is_thumb2</a></span> <span class="id">op</span> <span class="kwd">then</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">match</span> <span class="id"><a href="compcert.common.Memory.html#Mem.loadv">Mem.loadv</a></span> <span class="id"><a href="compcert.common.AST.html#Mint16unsigned">Mint16unsigned</a></span> <span class="id">m</span> (<span class="id"><a href="compcert.common.Values.html#Val.add">Val.add</a></span> <span class="id">v</span> (<span class="id"><a href="compcert.common.Values.html#Vint">Vint</a></span> (<span class="id"><a href="compcert.lib.Integers.html#Int.repr">Int.repr</a></span> 2))) <span class="kwd">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#Some">Some</a></span> (<span class="id"><a href="compcert.common.Values.html#Vint">Vint</a></span> <span class="id">i</span>) =&gt; <span class="id"><a href="compcert.lib.Coqlib.html#option_map">option_map</a></span> (<span class="kwd">fun</span> <span class="id">x</span> =&gt; (<span class="id">x</span>,<span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#true">true</a></span>)) (<span class="id"><a href="compcert.arm.BinDecode.html#decode_thumb2">decode_thumb2</a></span> <span class="id">op</span> <span class="id">i</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>              =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kwd">else</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id"><a href="compcert.lib.Coqlib.html#option_map">option_map</a></span> (<span class="kwd">fun</span> <span class="id">x</span> =&gt; (<span class="id">x</span>, <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#false">false</a></span>)) (<span class="id"><a href="compcert.arm.BinDecode.html#decode_thumb">decode_thumb</a></span> <span class="id">op</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id">_</span>            =&gt; <span class="id"><a href="http://coq.inria.fr/library/Coq.Init.Datatypes.html#None">None</a></span><br/>
+&nbsp;&nbsp;<span class="kwd">end</span>.
+</div>
+<div class="footer"><hr/>Generated by <a href="https://github.com/xavierleroy/coq2html/">coq2html</a></div>
+</body>
+</html>
